@@ -1,0 +1,353 @@
+<?php
+/**
+ * @file
+ * js_snippets.module
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function js_snippets_menu() {
+  $items = array();
+
+  $items['js_snippet/rendered/%js_snippets'] = array(
+    'title' => 'JS Snippet Render Callback',
+    'access callback' => 'js_snippets_access',
+    'access arguments' => array('js_snippets_render'),
+    'page callback' => 'js_snippets_ajax_render',
+    'page arguments' => array(2),
+    'delivery callback' => 'ajax_deliver',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+
+/**
+ * Implements hook_menu_alter().
+ */
+function js_snippets_menu_alter(&$items) {
+  if (module_exists('ctools')) {
+    $items['admin/content/js-snippets/export']['type'] = MENU_LOCAL_TASK;
+  }
+}
+
+
+/**
+ * Implements hook_entity_info().
+ */
+function js_snippets_entity_info() {
+
+  $info['js_snippets'] = array(
+    'label' => t('JS Snippet'),
+    'entity class' => 'JsSnippet',
+    'controller class' => 'JsSnippetController',
+    'base table' => 'js_snippets',
+    'fieldable' => FALSE,
+    'entity keys' => array(
+      'id' => 'id',
+      'label' => 'name',
+    ),
+    'bundles' => array(),
+    'load hook' => 'js_snippet_load',
+    'module' => 'js_snippets',
+    'access callback' => 'js_snippets_access',
+    'admin ui' => array(
+      'path' => 'admin/content/js-snippets',
+      'file' => 'js_snippets.admin.inc',
+      'controller class' => 'JsSnippetUIController',
+    ),
+  );
+
+  return $info;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function js_snippets_permission() {
+  $return = array();
+
+  $return['js_snippets_administer'] = array(
+    'title' => t('Administer JS Snippets'),
+    'description' => t('Allow a user access to create, edit, update and delete JavaScript Snippets'),
+  );
+
+  return $return;
+}
+
+/**
+ * JsSnippets Access Callback
+ */
+function js_snippets_access($op, $snippet = NULL, $account = NULL) {
+  return user_access('js_snippets_administer');
+}
+
+/**
+ * @return JsSnippet
+ */
+function js_snippets_create() {
+  $controller = entity_get_controller('js_snippets');
+  return $controller->create();
+}
+
+/**
+ * @param $snippet_id
+ *
+ * @return JsSnippet
+ */
+function js_snippets_load($snippet_id) {
+  $array = entity_load('js_snippets', array($snippet_id));
+  return reset($array);
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function js_snippets_block_info() {
+  $return = array();
+
+  $collection = db_select('js_snippets', 's')->fields('s', array('id'))->condition('add_block', TRUE)->execute()->fetchAllAssoc('id');
+
+  $ids = array_keys($collection);
+  $snippets = entity_load('js_snippets', $ids);
+  foreach ($snippets as $snippet) {
+
+    if ($snippet->add_block) {
+      $return['js-snippet-' . $snippet->id] = array(
+        'info' => t('JS Snippets: ') . $snippet->name,
+        'cache' => DRUPAL_CACHE_GLOBAL,
+      );
+    }
+  }
+
+  return $return;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function js_snippets_block_view($delta = '') {
+  $block = array();
+  if (strpos($delta, "js-snippet-") !== FALSE) {
+    $block['content'] = array();
+    $snippet_id = str_replace("js-snippet-", "", $delta);
+    if ($snippet = js_snippets_load((int) $snippet_id)) {
+      $snippet->asAttached($block['content']);
+    }
+  }
+
+  return $block;
+}
+
+
+/**
+ * Implements hook_wysiwyg_include_directory()
+ *
+ * Register a directory containing Wysiwyg plugins.
+ * @see wysiwyg.api.php
+ */
+function js_snippets_wysiwyg_include_directory($type) {
+  switch ($type) {
+    case 'plugins':
+      return $type;
+  }
+}
+
+/**
+ * Dialog Callback
+ */
+function js_snippet_wysiwyg_dialog($instance) {
+
+  drupal_add_library('system', 'ui.tabs');
+
+  $tabs = array();
+
+  // Build Add Form
+  $identifier = 'add-form';
+  list($tabs[$identifier]['title'], $tabs[$identifier]['content']) = js_snippet_build_embed_form($instance, $identifier);
+
+  // Build Library Table
+  $identifier = 'snippet-library';
+  list($tabs[$identifier]['title'], $tabs[$identifier]['content']) = js_snippet_build_library_table($identifier, array());
+
+
+  $tab_labels = array();
+  $content = array();
+
+  foreach ($tabs as $identifier => $tab) {
+    $tab_labels[] = l($tab['title'], '', array('fragment' => $identifier, 'external' => TRUE));
+    $content[] = drupal_render($tab['content']);
+  }
+
+  $tab_list = array(
+    '#theme' => 'item_list',
+    '#items' => $tab_labels,
+    '#type' => 'ul',
+  );
+
+  array_unshift($content, drupal_render($tab_list));
+
+  $popup = array(
+    '#prefix' => '<div id="snippet-tabs">',
+    '#suffix' => '</div>',
+    '#markup' => implode($content, PHP_EOL)
+  );
+
+  // Why are not using our own API?  Good question...
+  $mce = libraries_get_path('tinymce');
+  drupal_add_js($mce .'/jscripts/tiny_mce/tiny_mce_popup.js', 'file');
+
+  $path = drupal_get_path('module', 'js_snippets');
+  drupal_add_js($path . '/plugins/js_snippet/js_snippet.dialog.js', 'file');
+
+  return $popup;
+}
+
+
+function js_snippet_build_embed_form($instance, $identifier) {
+
+  if (is_numeric($instance) && $snippet = js_snippets_load($instance)) {
+    $snippet->inject_only = TRUE;
+    $title = 'Edit Snippet #' . $snippet->id;
+  }
+  else {
+    $snippet = js_snippets_create();
+    $snippet->inject_only = TRUE;
+    $snippet->name = "Embed Script for WYSIWYG";
+    $title = 'Add Snippet';
+  }
+
+  $form_state = form_state_defaults();
+  $form_state['build_info']['args'] = array($snippet, 'embed');
+  form_load_include($form_state, 'inc', 'js_snippets', 'js_snippets.admin');
+  $add_form = drupal_build_form('js_snippets_form', $form_state);
+
+  $form = array(
+    '#prefix' => '<div id="' . $identifier . '">',
+    '#suffix' => '</div>',
+  );
+  $form['form'] = $add_form;
+
+  return array(
+    $title,
+    $form,
+  );
+}
+
+function js_snippet_build_library_table($identifier, $filter) {
+
+  /** @var $UIController JsSnippetUIController */
+  $UIController = entity_ui_controller('js_snippets');
+
+  $table = $UIController->overviewTable(array('inject_only' => TRUE), 'snippet-library');
+
+  return array(
+    'Snippet Library',
+    $table,
+  );
+}
+
+function js_snippets_ajax_render(JsSnippet $snippet) {
+
+  $commands = array();
+
+  $commands[] = array(
+    'command' => 'renderSnippet',
+    'id' => $snippet->id,
+    'title' => $snippet->name,
+    'data' => $snippet->asHtml(),
+  );
+
+  return array('#type' => 'ajax', '#commands' => $commands);
+}
+
+
+/**
+ * Implements hook_filter_info().
+ */
+function js_snippets_filter_info() {
+  $return = array();
+
+  $return['js_snippets_embed'] = array(
+    'title' => t('Js snippets Embed Filter'),
+    'description' => t('Js snippets embed filter.  This is by definition a security risk, please use with caution.  This filter should probably run last since other filters may filter scripts.'),
+    'process callback' => 'js_snippets_filter_js_snippets_embed_process',
+    'weight' => 10,
+    'default settings' => array(),
+  );
+
+  return $return;
+}
+
+
+/**
+ * Implements hook_filter_FILTER_process().
+ */
+function js_snippets_filter_js_snippets_embed_process($text, $filter, $format, $langcode, $cache, $cache_id) {
+
+  return preg_replace_callback("/\[\{\[js_snippet:(\d+):([^\]]*?)\]\}\]/", '_js_snippet_embed_match', $text);
+}
+
+function _js_snippet_embed_match($matches) {
+
+  if ($js = js_snippets_load($matches[1])) {
+    return $js->asHtml();
+  }
+
+  return '';
+}
+
+function js_snippets_get_available_libraries() {
+
+  $libs = cache_get('js_snippets:libraries');
+
+  if (!isset($libs->data) || empty($libs->data)) {
+    $libs = new stdClass;
+    $library_data = array();
+    foreach (module_implements('library') as $module) {
+      $libraries = drupal_get_library($module);
+      foreach ($libraries as $library_key => $library) {
+        $library_data[$module . ":" . $library_key] = $library['title'] . " (" . $module . " module)" ;
+      }
+    }
+    $libs->data = $library_data;
+    cache_set('js_snippets:libraries', $library_data);
+  }
+
+  return $libs->data;
+}
+
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function js_snippets_ctools_plugin_api($owner, $api) {
+  if ($owner == 'js_snippets' && $api == 'default_js_snippets') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ */
+function js_snippets_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && $plugin == 'export_ui') {
+    return 'ctools/' . $plugin;
+  }
+}
+
+function js_snippets_export_snippet($values) {
+  return ctools_export_object('js_snippets_presets', $values);
+}
+
+function js_snippets_preset_loader($preset) {
+
+  $controller = entity_get_controller('js_snippets');
+  $snippet = $controller->create($preset->snippets);
+
+  module_load_include('inc', 'js_snippets', 'js_snippets.admin');
+  return drupal_get_form('js_snippets_form', $snippet, 'add');
+}

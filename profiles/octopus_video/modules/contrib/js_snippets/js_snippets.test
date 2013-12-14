@@ -1,0 +1,227 @@
+<?php
+/**
+ * @file js_snippets.test
+ */
+
+class JsSnippetsTest extends DrupalWebTestCase {
+
+
+  const EXTERNAL_SCRIPT = '//ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js';
+
+  const INTERNAL_SCRIPT = 'misc/machine-name.js';
+
+  public $regions = array();
+  protected $admin_user;
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'JS Snippets',
+      'description' => 'Test JS Snippets functionality.',
+      'group' => 'JS Snippets',
+    );
+  }
+
+  /**
+   * Overrides setUp()
+   */
+  function setUp() {
+    // Enable the timefield module.
+    parent::setUp(array('js_snippets'));
+
+    // Let us create our filter now
+    $this->addJsSnippetFilter();
+
+    $format = filter_format_load('snippet_format');
+
+    $format_permission = filter_permission_name($format);
+
+    // Reset Perms
+    $this->checkPermissions(array(), TRUE);
+
+    $this->admin_user = $this->drupalCreateUser(array(
+      'administer blocks',
+      $format_permission,
+      'access administration pages',
+    ));
+
+    $this->drupalLogin($this->admin_user);
+
+    // Define the existing regions
+    $this->regions[] = 'header';
+    $this->regions[] = 'content';
+    $this->regions[] = 'footer';
+
+  }
+
+  function testEmbedFilter() {
+
+    // Create a simple snippet
+    $snippet = $this->createSimpleJsSnippet();
+
+    $snippet_js = $snippet->asHtml();
+
+    $settings = array(
+      'body' => array(
+        LANGUAGE_NONE => array(
+          array(
+            'value' => '[{[js_snippet:1:AnyTitle]}]',
+            'format' => filter_default_format(),
+          ),
+        )
+      ),
+      'promote' => 1,
+    );
+
+    // Create a new node.
+    $node = $this->drupalCreateNode($settings);
+    $this->drupalGet('node/' . $node->nid);
+
+    $this->assertRaw($snippet_js, t('JS Snippet found embedded'));
+  }
+
+  function testAttachExternalResource() {
+
+    $snippet = $this->createAttachExternalJsSnippet();
+
+    $edit = array();
+
+    // Do this to generate our block
+    $this->drupalGet("admin/structure/block");
+
+    $block_id = 'blocks[js_snippets_js-snippet-1][region]';
+    $edit['blocks[' . 'js_snippets_js-snippet-' . $snippet->id . '][region]'] = $this->regions[0];
+    $this->drupalPost('admin/structure/block', $edit, t('Save blocks'));
+    $this->assertText(t('The block settings have been updated.'), 'Block successfully move to first header region.');
+
+    $this->drupalGet("/");
+    $this->assertRaw('<script type="text/javascript" src="' . static::EXTERNAL_SCRIPT . '"></script>', "JS Snippet external script attached");
+  }
+
+
+  function testAttachInternalResource() {
+
+    $snippet = $this->createAttachInternalJsSnippet();
+
+    $edit = array();
+
+    // Do this to generate our block
+    $this->drupalGet("admin/structure/block");
+
+    $block_id = 'blocks[js_snippets_js-snippet-1][region]';
+    $edit['blocks[' . 'js_snippets_js-snippet-' . $snippet->id . '][region]'] = $this->regions[0];
+    $this->drupalPost('admin/structure/block', $edit, t('Save blocks'));
+    $this->assertText(t('The block settings have been updated.'), 'Block successfully move to first header region.');
+
+    $this->drupalGet("/");
+
+    $this->assertRaw('<script type="text/javascript" src="' . $this->getAbsoluteUrl(static::INTERNAL_SCRIPT) . "?" . variable_get('css_js_query_string', '0',
+    "Local JS Snippet attached") . '"></script>');
+  }
+
+
+  function addJsSnippetFilter() {
+    // Add a text format with minimum data only.
+
+    $format = new stdClass();
+    $format->format = 'snippet_format';
+    $format->name = 'JS Snippet Format';
+    $format->status = 1;
+    $format->weight = -100;
+    $format->cache = 0; // Set to not cache output;
+
+    $format->filters = array(
+      'js_snippets_embed' => array(
+        'status' => 1,
+        'settings' => array(),
+      ),
+    );
+    filter_format_save($format);
+
+    return $format;
+  }
+
+
+  function createSimpleJsSnippet() {
+
+    $snippet = js_snippets_create();
+
+    $snippet->name = "Test Snippet 1";
+    $snippet->description = "Test Snippet #1";
+    $snippet->library = FALSE;
+    $snippet->inject_only = TRUE;
+    $snippet->add_block = FALSE;
+    $snippet->data['dependencies'] = array();
+    $snip = $snippet->addSnippet();
+
+    $snip->data = <<<EOF
+<a id="js-snippet" href="/js_snippet">Not a JS Snippet Link</a>
+<script type="text/javascript">
+    (function ($) {
+      $('a#js-snippet').html("JS Snippet Link");
+    })(jQuery);
+</script>
+EOF;
+
+    $snip->type = JsSnippet::TYPE_INJECTED;
+
+    $snippet->snippets = array(
+      $snip
+    );
+
+    $snippet->save();
+
+    return $snippet;
+  }
+
+
+  function createAttachExternalJsSnippet() {
+    $snippet = js_snippets_create();
+
+    $snippet->name = "Test Snippet External JS";
+    $snippet->description = "Test Snippet External";
+    $snippet->library = TRUE;
+    $snippet->inject_only = FALSE;
+    $snippet->add_block = TRUE;
+    $snippet->data['dependencies'] = array();
+
+    // Create Snippet
+    $snip = $snippet->addSnippet();
+    $snip->data = static::EXTERNAL_SCRIPT;
+    $snip->type = JsSnippet::TYPE_EXTERNAL;
+
+    $snippet->snippets = array(
+      $snip
+    );
+
+    $snippet->save();
+
+    return $snippet;
+  }
+
+  function createAttachInternalJsSnippet() {
+    $snippet = js_snippets_create();
+
+    $snippet->name = "Test Snippet Internal JS";
+    $snippet->description = "Test Snippet Internal";
+    $snippet->library = TRUE;
+    $snippet->inject_only = FALSE;
+    $snippet->add_block = TRUE;
+    $snippet->data['dependencies'] = array();
+
+    // Create Snippet
+    $snip = $snippet->addSnippet();
+    $snip->data = static::INTERNAL_SCRIPT;
+    $snip->type = JsSnippet::TYPE_FILE;
+
+    $snippet->snippets = array(
+      $snip
+    );
+
+    $snippet->save();
+
+    return $snippet;
+  }
+}

@@ -1,0 +1,132 @@
+<?php
+/**
+ * @file
+ * js_snippets.install
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function js_snippets_schema() {
+  $schema['js_snippets'] = array(
+    'description' => 'JavaScript Snippet',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique Js_snippets ID.',
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'size' => 'normal',
+        'length' => 255,
+        'default' => '',
+        'description' => 'Snippet Name',
+      ),
+      'description' => array(
+        'type' => 'text',
+        'size' => 'normal',
+        'serialize' => FALSE,
+        'description' => 'Snippet Description',
+      ),
+      'library' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Show in Snippet Library',
+      ),
+      'add_block' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Add as system block',
+      ),
+      'inject_only' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Only allow printed script, no use of Drupal JS API',
+      ),
+      'snippets' => array(
+        'type' => 'blob',
+        'size' => 'normal',
+        'serialize' => TRUE,
+        'description' => 'Serialized Snippets Classes',
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'size' => 'normal',
+        'serialize' => TRUE,
+        'description' => 'Additional Data',
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+  $schema['js_snippets_presets'] = array(
+    'description' => t('Table storing preset definitions.'),
+    'export' => array(
+      'identifier' => 'js_snippets',
+      'bulk export' => TRUE,
+      'primary key' => 'pid',
+      'default hook' => 'default_js_snippets',
+      'admin_title' => 'name',
+      'admin_description' => 'description',
+      'api' => array(
+        'owner' => 'js_snippets',
+        'api' => 'default_js_snippets',
+        'minimum_version' => '1',
+        'current_version' => '1',
+      ),
+//      'object' => 'view',
+//      // the callback to load the displays
+//      'subrecords callback' => 'views_load_display_records',
+//      // the variable that holds enabled/disabled status
+//      'status' => 'views_defaults',
+//      // CRUD callbacks
+//      'create callback' => 'views_new_view',
+//      'save callback' => 'views_save_view',
+//      'delete callback' => 'views_delete_view',
+      'export callback' => 'js_snippets_export_snippet',
+//      'status callback' => 'views_export_status',
+//      'cache defaults' => TRUE,
+//      'default cache bin' => 'cache_views',
+    ),
+
+    'fields' => array(
+      'name' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'Unique ID for presets. Used to identify them programmatically.',
+      ),
+      'pid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary ID field for the table. Not used for anything except internal lookups.',
+        'no export' => TRUE, // Do not export database-only keys.
+      ),
+      'description' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'A human readable name of a preset.',
+      ),
+      'snippets' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'description' => 'Snippet data.',
+      ),
+    ),
+    'primary key' => array('pid'),
+    'unique keys' => array(
+      'name' => array('name'),
+    ),
+  );
+  return $schema;
+}

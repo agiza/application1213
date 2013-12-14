@@ -1,0 +1,20 @@
+name = Media: S3
+description = Provides S3 support for File Entity and the Media module.
+package = "Media"
+core = 7.x
+files[] = media_s3.module
+files[] = includes/MediaInternetS3Handler.inc
+files[] = includes/MediaS3StreamWrapper.inc
+files[] = includes/MediaS3Browser.inc
+files[] = includes/media_s3.formatters.inc
+files[] = includes/media_s3.variables.inc
+dependencies[] = media
+dependencies[] = media_internet
+
+
+; Information added by drupal.org packaging script on 2013-10-01
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "media_s3"
+datestamp = "1380586560"
+

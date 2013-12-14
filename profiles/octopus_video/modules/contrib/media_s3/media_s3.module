@@ -1,0 +1,659 @@
+<?php
+
+/**
+ * @file media_s3/media_s3.module
+ *
+ * Media: S3 provides a stream wrapper and formatters for videos provided
+ * by S3, available at http://s3.com/.
+ *
+ * @TODO:
+ * Get the S3 tab working.
+ *  - Search by video name, user name, and channel.
+ *  - Default to user's channel videos.
+ * Review all code and remove cruft.
+ * Assess if M:YT 3.x could be formatters added on to the OEmbed module.
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function media_s3_menu() {
+  $items = array();
+
+  $items['admin/config/media/media-s3'] = array(
+    'title' => 'Media S3',
+    'description' => 'Add Media entities for video in specific S3 bucket',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('media_s3_admin'),
+    'access arguments' => array('access administration pages'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_admin().
+ */
+function media_s3_admin() {
+  $form = array();
+
+  $form['media_s3_bucket'] = array(
+    '#type'           => 'textfield',
+    '#title'          => t('Default Bucket Name'),
+    '#default_value'  => variable_get('media_s3_bucket', ''),
+    '#required'       => TRUE,
+  );
+
+  $form['media_s3_mp4_domain'] = array(
+    '#type'           => 'textfield',
+    '#title'          => t('MP4 Domain Name'),
+    '#description'    => t('Domain name used to access .mp4 in Amazon bucket using a URL'),
+    '#default_value'  => variable_get('media_s3_mp4_domain', ''),
+  );
+  
+  $form['media_s3_thumbnail_domain'] = array(
+    '#type'           => 'textfield',
+    '#title'          => t('Thumbnail Domain Name'),
+    '#description'    => t('If serving thumbnails from a different domain name.'),
+    '#default_value'  => variable_get('media_s3_thumbnail_domain', ''),
+  );
+
+  $form['media_s3_clear_cache'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Clear cache'),
+  );
+
+  $form['media_s3_clear_cache']['clear'] = array(
+    '#type' => 'submit',
+    '#value' => t('Clear file metadata cache'),
+    '#submit' => array('media_s3_clear_cache_submit'),
+  );
+
+  $form['media_s3_clear_cache']['rebuild'] = array(
+    '#type' => 'submit',
+    '#value' => t('Rebuild file metadata cache'),
+    '#submit' => array('media_s3_batch_rebuild_cache'),
+  );
+  return system_settings_form($form);
+}
+
+function media_s3_admin_validate($form, &$form_state) {
+  $bucket = $form_state['values']['media_s3_bucket'];
+  
+  if(!libraries_load('awssdk')) {
+    drupal_set_message(t('Unable to load the AWS SDK. Please check you have installed the library correctly and configured your S3 credentials.'), 'error');
+  }
+  else if(!class_exists('AmazonS3')) {
+    drupal_set_message(t('Cannot load AmazonS3 class. Please check the awssdk is installed correctly'), 'error');
+  }
+  else {
+    try {
+      $s3 = new AmazonS3();
+      
+      // test connection
+      $user_id = $s3->get_canonical_user_id();
+      if(!$user_id['id']) {
+        form_set_error('media_s3_bucket', t('The S3 access credentials are invalid'));
+      }
+      else if(!$s3->if_bucket_exists($bucket)) {
+        form_set_error('media_s3_bucket', t('The bucket does not exist'));
+      }
+    }
+    catch(RequestCore_Exception $e){
+      if(strstr($e->getMessage(), 'SSL certificate problem')) {
+        form_set_error('media_s3_bucket', t('There was a problem with the SSL certificate. Try setting AWS_CERTIFICATE_AUTHORITY to true in "libraries/awssdk/config.inc.php". You may also have a curl library (e.g. the default shipped with MAMP) that does not contain trust certificates for the major authorities.'));
+      }
+      else {
+        form_set_error('media_s3_bucket', t('There was a problem connecting to S3: '.$e));
+      }
+
+    }
+    catch(Exception $e) {
+      form_set_error('media_s3_bucket', t('There was a problem using S3: '.$e));
+    }
+  }  
+}
+
+/**
+ * Submit callback; clear file metadata cache.
+ *
+ */
+function media_s3_clear_cache_submit($form, &$form_state) {
+  db_query('TRUNCATE TABLE {media_s3_file}');
+  drupal_set_message(t('Cache cleared.'));
+}
+
+
+
+/**
+ * Submit handler to rebuild the cache via the Batch API.
+ */
+function media_s3_batch_rebuild_cache($options1, $options2) {
+
+  //@ todo: Do not truncate the table, if we can find a way to get just the newly-added files.
+  db_query('TRUNCATE TABLE {media_s3_file}');
+
+  $batch = array(
+    'operations' => array(
+      array('media_s3_rebuild_process', array($options1, $options2)),
+    ),
+    'finished' => 'media_s3_rebuild_process_finished',
+    'title' => t('Processing Media S3 Cache Rebuild'),
+    'init_message' => t('Starting. Connecting to S3 and fetching objects. Please wait...'),
+    'progress_message' => t('Rebuilding the cache... @current of @total'),
+    'error_message' => t('Media S3 Cache Rebuild has encountered an error.'),
+  );
+  batch_set($batch);
+
+}
+
+/**
+ * Batch Operation Callback
+ */
+function media_s3_rebuild_process($options1, $options2, &$context) {
+
+  $bucket = variable_get('media_s3_bucket', '');
+
+  if(!libraries_load('awssdk')) {
+    drupal_set_message(t('Unable to load the AWS SDK. Please check you have installed the library correctly and configured your S3 credentials.'), 'error');
+  }
+  else if(!class_exists('AmazonS3')) {
+    drupal_set_message(t('Cannot load AmazonS3 class. Please check the awssdk is installed correctly'), 'error');
+  }
+  else {
+    try {
+      $s3 = new AmazonS3();
+
+      $user_id = $s3->get_canonical_user_id();
+      if(!$user_id['id']) {
+        drupal_set_message('The S3 access credentials are invalid', 'error');
+      }
+      else if(!$s3->if_bucket_exists($bucket)) {
+        drupal_set_message('The bucket does not exist', 'error');
+      }
+
+      $bucket = variable_get('media_s3_bucket', '');
+
+      $limit = 100; // @todo: Make this configurable.
+
+      // Total number of objects in the bucket.
+      $total = count($s3->get_object_list($bucket, array('pcre' => '/mpg/i')));
+
+      if (!isset($context['sandbox']['progress'])) {
+
+        $objects = $s3->get_object_list($bucket, array('max-keys' => $limit, 'pcre' => '/mpg/i'));
+
+        $context['sandbox']['last_key'] = $objects[$limit-1];
+        $context['sandbox']['progress'] = 0;
+        $context['sandbox']['current_node'] = 0;
+      }
+      else {
+        /// If we 've already started processing, remember the last URI so we can paginate from there later.
+        $objects = $s3->get_object_list($bucket,
+          array('max-keys' => $limit, 'marker' => $context['sandbox']['last_key']));
+
+        // Reset the last_key for this new batch.
+        $context['sandbox']['last_key'] = $objects[$limit-1];
+      }
+
+      $context['sandbox']['max'] = $total;
+
+      // Grab each individual object's metadata and inset it into the database.
+      foreach($objects as $object) {
+        //$metadata = $wrapper->_amazons3_get_object($object);
+
+        // Fudge the metadata for now. @todo: Uncomment above call for $metadata, but try to make it faster.
+        $metadata['filesize'] = 0;
+        $metadata['timestamp'] = time();
+        $metadata['dir'] = 0;
+        $metadata['mode'] = 33279;
+        $metadata['uid'] = 0;
+        $metadata['uri'] = $object;
+
+        if ($metadata['uri'] != ' ') {
+          $context['sandbox']['progress']++;
+          $context['results'][] += $object;
+          $context['sandbox']['current_node'] = $metadata['uri'];
+          $context['message'] = t('Now processing %current of %total',
+            array('%current' => $context['sandbox']['progress'], '%total' => $total));
+
+          db_merge('media_s3_file')
+            ->key(array('uri' => $metadata['uri']))
+            ->fields($metadata)
+            ->execute();
+
+          if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+            $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+          }
+        }
+      }
+    }
+    catch(RequestCore_Exception $e){
+      if(strstr($e->getMessage(), 'SSL certificate problem')) {
+        drupal_set_message('There was a problem with the SSL certificate. Try setting AWS_CERTIFICATE_AUTHORITY to true in "libraries/awssdk/config.inc.php".
+        You may also have a curl library (e.g. the default shipped with MAMP) that does not contain trust certificates for the major authorities.', 'error');
+      }
+      else {
+        drupal_set_message('There was a problem connecting to S3: '.$e, 'error');
+      }
+
+    }
+    catch(Exception $e) {
+      drupal_set_message('There was a problem using S3: '.$e, 'error');
+    }
+  }
+}
+
+/**
+ * Batch 'finished' callback
+ */
+function media_s3_rebuild_process_finished($success, $results, $operations) {
+  if ($success) {
+    $message = t('Cache successfully rebuilt. !count files were added.', array('!count' => count($results)));
+  }
+  else {
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+  }
+  drupal_set_message($message);
+}
+
+
+/**
+ * Implements hook_menu().
+ */
+function media_s3_cron() {
+  
+  // update the s3 cache
+  $files = db_query("SELECT * FROM {media_s3_file}");
+  
+  foreach($files AS $file) {
+    
+    $embed_code = 'http://' . variable_get('media_s3_mp4_domain', '') . '/' . $file->uri;
+    
+    dsm($embed_code);
+    //$provider = media_internet_get_provider($embed_code);
+    // Providers decide if they need to save locally or somewhere else.
+    // This method returns a file object
+    //$file = $provider->save();
+    
+  }
+  // create media entities for any video that doesn't exist
+  
+  
+}
+
+/**
+ * NORMAL MEDIA_[PROVIDER] MODULE FUNCTIONS
+ */
+
+// A registry of variable_get defaults.
+include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'media_s3') . '/includes/media_s3.variables.inc';
+
+// Hooks and callbacks for integrating with File Entity module for display.
+include_once DRUPAL_ROOT . '/' . drupal_get_path('module', 'media_s3') . '/includes/media_s3.formatters.inc';
+
+/**
+ * Implements hook_media_internet_providers().
+ */
+function media_s3_media_internet_providers() {
+  $info['MediaInternetS3Handler'] = array(
+    'title' => t('Media S3'),
+  );
+
+  return $info;
+}
+
+/**
+ * Implements hook_stream_wrappers().
+ */
+function media_s3_stream_wrappers() {
+  return array(
+    'media-s3' => array(
+      'name' => t('S3 videos'),
+      'class' => 'MediaS3StreamWrapper',
+      'description' => t('Videos provided by S3.'),
+      'type' => STREAM_WRAPPERS_READ_VISIBLE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function media_s3_theme($existing, $type, $theme, $path) {
+  return array(
+    'media_s3_video' => array(
+      'variables' => array('uri' => NULL, 'options' => array()),
+      'file' => 'media_s3.theme.inc',
+      'path' => $path . '/includes/themes',
+      'template' => 'media-s3-video',
+    ),
+  );
+}
+
+/**
+ * Implements hook_media_parse().
+ *
+ * @todo This hook should be deprecated. Refactor Media module to not call it
+ *   any more, since media_internet should be able to automatically route to the
+ *   appropriate handler.
+ */
+function media_s3_media_parse($embed_code) {
+  $handler = new MediaInternetS3Handler($embed_code);
+  return $handler->parse($embed_code);
+}
+
+/**
+ * Implements hook_file_mimetype_mapping_alter().
+ *
+ * Regster the video/s3 mimetype.
+ */
+function media_s3_file_mimetype_mapping_alter(&$mapping) {
+  $mapping['mimetypes'][] = 'video/media-s3';
+}
+
+/*
+ * Implements hook_file_default_types_alter().
+ *
+ * Adds the video/s3 fake mimetype to video files.
+ */
+function media_s3_file_default_types_alter(&$types) {
+  $types['video']->mimetypes[] = 'video/media-s3';
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function media_s3_ctools_plugin_api($owner, $api) {
+  static $api_versions = array(
+    'file_entity' => array(
+      'file_default_displays' => 1,
+    ),
+  );
+  if (isset($api_versions[$owner][$api])) {
+    return array('version' => $api_versions[$owner][$api]);
+  }
+}
+
+/**
+ * S3 search tab for the Media browser.
+ */
+
+/**
+ * Implements hook_media_browser_plugin_info().
+ *
+ * Commented out for release versions, active in dev versions. To enable the
+ * S3 media browser tab, uncomment this function.
+ */
+function media_s3_media_browser_plugin_info() {
+  $info['s3'] = array(
+    'title' => t('Media S3'),
+    'class' => 'MediaS3Browser',
+  );
+
+  return $info;
+}
+
+/**
+ * Provides a form for adding media items from S3 search.
+ */
+function media_s3_add($form, &$form_state = array()) {
+  module_load_include('inc', 'media', 'includes/media.browser');
+
+  // Our search term can come from the form, or from the pager.
+  $term = isset($form_state['input']['search']) ? $form_state['input']['search'] : (isset($_GET['search']) ? $_GET['search'] : '');
+
+  $form['search'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Search'),
+    '#description' => t('Input a phrase or tags to search.'),
+    '#default_value' => $term,
+  );
+  $form['apply'] = array(
+    '#type' => 'button',
+    '#value' => t('Apply'),
+  );
+
+  // This is our half-assed pager.
+  $page = isset($_GET['page-yt']) ? $_GET['page-yt'] : 0;
+  if (isset($form_state['input']['search'])) {
+    // Reset the pager when we press apply.
+    $page = 0;
+  }
+  if (!empty($term)) {
+    $search = media_s3_video_search(array('q' => $term, 'max-results' => 12, 'start-index' => $page * 12 + 1));
+  }
+  $form['videos']['#prefix'] = '<div id="container"><div id="scrollbox"><ul id="media-browser-library-list" class="media-list-thumbnails">';
+  $form['videos']['#suffix'] = '</ul><div id="status"></div></div></div>';
+
+  $empty = FALSE;
+  $files = array();
+  if (!isset($search['entry'])) {
+    $empty = TRUE;
+  }
+  else {
+    foreach ($search['entry'] as $video) {
+      try {
+        $uri = media_parse_to_uri($video['link'][0]['@attributes']['href']);
+      }
+      catch (Exception $e) {
+        // Ignore invalid videos.
+        continue;
+      }
+      // Create a temporary file object for our retrieved video.
+      $file = file_uri_to_object($uri);
+      $file->type = 'video';
+      if (!isset($file->fid)) {
+        $file->fid = 0;
+      }
+      media_browser_build_media_item($file);
+      $file->preview = l($file->preview, 'media/browser', array(
+        'html' => TRUE,
+        'attributes' => array(
+          'data-uri' => $uri,
+        ),
+        'query' => array('render' => 'media-popup', 'uri' => $uri),
+      ));
+      $form['videos'][$uri] = array(
+        '#markup' => $file->preview,
+        '#prefix' => '<li>',
+        '#suffix' => '</li>',
+      );
+      $files[$uri] = $file;
+    }
+  }
+
+  if (!count($files)) {
+    $empty= TRUE;
+  }
+  if ($empty) {
+    $form['empty'] = array(
+      '#markup' => '<div class="empty-message">' . t('No videos match your search criteria. Please try again.') . '</div>',
+    );
+  }
+
+  $query = $_GET;
+  if ($term !== '') {
+    $query['search'] = $term;
+  }
+
+  $dest = $query['q'];
+  unset($query['q']);
+  $prev = $next = '';
+  if ($page) {
+    $query['page-yt'] = $page - 1;
+    $prev = l(t('previous'), $dest, array('query' => $query));
+  }
+  $query['page-yt'] = $page + 1;
+  if (!$empty) {
+    $next = l(t('next'), $dest, array('query' => $query));
+  }
+
+  $form['pager']= array(
+    '#markup' => $prev . ' ' . $next,
+  );
+
+  $form['sumitted-video'] = array(
+    '#type' => 'hidden',
+    '#default_value' => FALSE,
+  );
+
+  // Add the files to JS so that they are accessible inside the browser
+  drupal_add_js(array('media' => array('files' => $files)), 'setting');
+
+  // Add media browser javascript and CSS.
+  drupal_add_js(drupal_get_path('module', 'media_s3') . '/js/media-s3.browser.js');
+
+  // @TODO: Remove deprecated library js and css. They're removed in Media,
+  // so let's comment out for now.
+  // drupal_add_js(drupal_get_path('module', 'media') . '/js/plugins/media.library.js');
+  // drupal_add_css(drupal_get_path('module', 'media') . '/js/plugins/media.library.css');
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+  );
+  return $form;
+}
+
+/**
+ * Allow stream wrappers to have their chance at validation.
+ *
+ * Any module that implements hook_media_parse will have an
+ * opportunity to validate this.
+ *
+ * @see media_parse_to_uri()
+ */
+function media_s3_add_validate($form, &$form_state) {
+  if ($form_state['values']['op'] == t('Apply')) {
+    return;
+  }
+  $uri = $form_state['values']['sumitted-video'];
+  try {
+    $file = file_uri_to_object($uri, TRUE);
+  }
+  catch (Exception $e) {
+    form_set_error('url', $e->getMessage());
+    return;
+  }
+
+  if (!$file->uri) {
+    form_set_error('url', t('Please select a video.'));
+    return;
+  }
+
+  $validators = $form['#validators'];
+  if ($validators) {
+    // Check for errors. @see media_add_upload_validate calls file_save_upload().
+    // this code is ripped from file_save_upload because we just want the validation part.
+    // Call the validation functions specified by this function's caller.
+    $errors = file_validate($file, $validators);
+
+    if (!empty($errors)) {
+      $message = t('%uri could not be added.', array('%uri' => $uri));
+      if (count($errors) > 1) {
+        $message .= theme('item_list', array('items' => $errors));
+      }
+      else {
+        $message .= ' ' . array_pop($errors);
+      }
+      form_set_error('url', $message);
+      return FALSE;
+    }
+  }
+  // @TODO: Validate that if we have no $uri that this is a valid file to
+  // save. For instance, we may only be interested in images, and it would
+  // be helpful to let the user know they passed the HTML page containing
+  // the image accidentally. That would also save us from saving the file
+  // in the submit step.
+
+  // This is kinda a hack of the same.
+
+  // This should use the file_validate routines that the upload form users.
+  // We need to fix the media_parse_to_file routine to allow for a validation.
+}
+
+/**
+ * @TODO: Document this function.
+ */
+function media_s3_add_submit($form, &$form_state) {
+  $uri = $form_state['values']['sumitted-video'];
+  try {
+    // Save the remote file
+    $file = file_uri_to_object($uri, TRUE);
+    file_save($file);
+  }
+  catch (Exception $e) {
+    form_set_error('url', $e->getMessage());
+    return;
+  }
+
+  if (!$file->fid) {
+    form_set_error('url', t('The file %file could not be saved. An unknown error has occurred.', array('%file' => $uri)));
+    return;
+  }
+  else {
+    $form_state['file'] = $file;
+  }
+
+  // Redirect to the file edit page after submission.
+  // @TODO: media_access() is a wrapper for file_entity_access(). Switch to the
+  // new function when Media 1.x is deprecated.
+  if (media_access('update', $file)) {
+    $destination = array('destination' => 'admin/content/file');
+    if (isset($_GET['destination'])) {
+      $destination = drupal_get_destination();
+      unset($_GET['destination']);
+    }
+    $form_state['redirect'] = array('file/' . $file->fid . '/edit', array('query' => $destination));
+  }
+  else {
+    $form_state['redirect'] = 'admin/content/file';
+  }
+}
+
+/**
+ * @TODO: Document this function.
+ */
+function media_s3_video_search($options = array()) {
+  $options['v'] = 2;
+  return media_retrieve_xml(url(MEDIA_S3_REST_API, array('query' => $options)));
+}
+
+/**
+ * Check to ensure that a given id is valid.
+ *
+ * @param string $id
+ *   The S3 video id.
+ * @param boolean $refresh
+ *   (Defaults to FALSE) If TRUE, then reset the value from the cache.
+ * @return boolean
+ *   Returns TRUE if the video is valid.
+ *
+ * @TODO: How does this compare to MediaInternetS3Handler's validId
+ * method, and can we refactor the code to rely on only one of them?
+ */
+function media_s3_valid_id($id, $refresh = FALSE) {
+  $ids = &drupal_static(__FUNCTION__, array());
+
+  // Return our cached id if allowed, and it exists.
+  if (!$refresh && isset($ids[$id])) {
+    return $ids[$id];
+  }
+  elseif (!$refresh && !isset($ids[$id])) {
+    return $id;
+  }
+  elseif (!$refresh && $cache = cache_get('media_s3:id:' . $id, 'cache_media_xml')) {
+    $ids[$id] = $cache->data;
+    return $ids[$id];
+  }
+
+  $url = url(MEDIA_S3_REST_API . '/' . $id);
+  $response = drupal_http_request($url, array('method' => 'HEAD'));
+  $ids[$id] = ($response->code == 200);
+  cache_set('media_s3:id:' . $id, $ids[$id], 'cache_media_xml', media_variable_get('xml_cache_expire', 3600));
+  return $ids[$id];
+}

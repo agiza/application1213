@@ -1,0 +1,12 @@
+name = Automodal
+package = User interface
+description = Automatically convert links to modal links.
+core = 7.x
+dependencies[] = modalframe
+
+; Information added by  packaging script on 2013-11-19
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "automodal"
+datestamp = "1384867711"
+

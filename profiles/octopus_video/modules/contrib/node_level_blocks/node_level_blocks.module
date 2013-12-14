@@ -1,0 +1,174 @@
+<?php
+
+/**
+ * @file
+ * Allows node editors to assign blocks to regions on a node base.
+ *
+ * @name Node-level Blocks
+ * @author skilip
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function node_level_blocks_permission() {
+  return array(
+    'administer node_level_blocks' => array(
+      'title' => t('Administer Node-level Blocks'),
+      'description' => t('Administer Node-level Blocks'),
+    ),
+    'edit node_level_blocks' => array(
+      'title' => t('Edit Node-level Blocks'),
+      'description' => t('Edit Node-level Blocks'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function node_level_blocks_node_load($nodes, $types) {
+  foreach ($nodes as $node) {
+    $nodes[$node->nid]->node_level_blocks = array(
+      'blocks' => node_level_blocks_node_load_blocks(!empty($node->nid) ? $node->nid : 0),
+      'settings' => node_level_blocks_node_type_settings($node->type),
+    );
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function node_level_blocks_node_update($node) {
+  if ($node->node_level_blocks && !empty($node->node_level_blocks['blocks'])) {
+    node_level_blocks_node_save_blocks($node);
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function node_level_blocks_node_insert($node) {
+  if (isset($node->node_level_blocks) && !empty($node->node_level_blocks['blocks'])) {
+    node_level_blocks_node_save_blocks($node);
+  }
+}
+
+/**
+ * Implements hook_theme().
+ * @link http://api.drupal.org/api/function/hook_theme/6
+ */
+function node_level_blocks_theme() {
+  return array(
+    'node_level_blocks_fieldset' => array(
+      'template' => 'node_level_blocks-fieldset',
+      'file' => 'node_level_blocks.admin.inc',
+      'render element' => 'form',
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function node_level_blocks_form_node_form_alter(&$form, &$form_state) {
+  // Add a fieldset to the node type form in which admins can enable or disable node_level_blocks per content type.
+  module_load_include('inc', 'node_level_blocks', 'node_level_blocks.admin');
+  node_level_blocks_fieldset_node_edit_form($form, $form_state);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function node_level_blocks_form_node_type_form_alter(&$form, &$form_state) {
+  // Add a fieldset to the node type form in which admins can enable or disable node_level_blocks per content type.
+  module_load_include('inc', 'node_level_blocks', 'node_level_blocks.admin');
+  node_level_blocks_node_type_form($form, $form_state);
+}
+
+/**
+ * Saves block - region relations for a given node page.
+ */
+function node_level_blocks_node_save_blocks($node) {
+  $blocks = $node->node_level_blocks['blocks'];
+
+  // Detele old entries for this node.
+  db_delete('node_level_blocks')
+    ->condition('nid', $node->nid)
+    ->execute();
+
+  foreach ($blocks as $block) {
+    $block = (object) $block;
+    if ($block->region != BLOCK_REGION_NONE) {
+      db_insert('node_level_blocks')
+        ->fields(array(
+          'nid' => $node->nid,
+          'bid' => $block->bid,
+          'region' => $block->region,
+          'weight' => $block->weight,
+        ))
+        ->execute();
+    }
+  }
+}
+
+/**
+ * Loads all blocks associated with the node of the given nid.
+ */
+function node_level_blocks_node_load_blocks($nid) {
+  $blocks = &drupal_static(__FUNCTION__);
+
+  if (empty($blocks) || !isset($blocks[$nid])) {
+    $query = db_select('node_level_blocks', 'nlb');
+    $query->fields('nlb', array('bid', 'region', 'weight'));
+    $query->join('block', 'b', 'nlb.bid = b.bid');
+    $query->fields('b', array('module', 'delta', 'cache', 'title'));
+    $query->condition('nlb.nid', $nid);
+    $query->orderBy('nlb.weight');
+
+    $blocks[$nid] = $query->execute()->fetchAllAssoc('bid');
+  }
+  return $blocks[$nid];
+}
+
+/**
+ *
+ */
+function node_level_blocks_block_list_alter(&$block_list) {
+
+  if (($node = menu_get_object()) && isset($node->node_level_blocks)) {
+    $settings = $node->node_level_blocks['settings'];
+    $blocks = $node->node_level_blocks['blocks'];
+
+    foreach ($blocks as $bid => $block) {
+      // Check if the block is already present in the block list.
+      if (isset($block_list[$bid])) {
+        // If settings tell us to allow us to repeat blocks, we'll create a
+        // duplicate only if the regions differ.
+        if ($settings->multi) {
+          if ($block_list[$bid]->region !== $block->region) {
+            $block_list[$bid . '-' . $block->region] = $block;
+          }
+          continue;
+        }
+      }
+      // If the settings tell us not to duplicate blocks, we'll use the node
+      // level block as leading.
+      $block_list[$bid] = $block;
+    }
+  }
+}
+
+/**
+ * Helper function for getting the snipets configuration settings for a node type.
+ */
+function node_level_blocks_node_type_settings($node_type) {
+  $defaults = (object) array(
+    'enabled' => FALSE,
+    'display_node_edit' => FALSE,
+    'multi' => FALSE,
+    'modules' => array('block', 'nodeblock'),
+    'regions' => array('content'),
+  );
+  return variable_get('node_level_blocks_enabled_' . $node_type, $defaults);
+}

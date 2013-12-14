@@ -1,0 +1,19 @@
+name = "Node-level Blocks"
+description = "Allows node editors to assign blocks to regions on a node base."
+dependencies[] = block
+dependencies[] = node
+core = 7.x
+
+; Information added by drupal.org packaging script on 2011-08-11
+version = "6.x-1.4"
+core = 7.x
+project = "node_level_blocks"
+datestamp = "1313066521"
+
+
+; Information added by drupal.org packaging script on 2012-12-13
+version = "7.x-1.0-beta1"
+core = "7.x"
+project = "node_level_blocks"
+datestamp = "1355413412"
+
