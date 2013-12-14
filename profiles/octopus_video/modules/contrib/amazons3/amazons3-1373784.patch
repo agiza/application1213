@@ -1,0 +1,50 @@
+diff --git a/README b/README
+index 51876f0..17c89e6 100644
+--- a/README
++++ b/README
+@@ -3,7 +3,7 @@ Installation
+ - Download and install the Libraries (7.x-2.x branch) and AWS SDK modules
+ http://drupal.org/project/libraries
+ http://drupal.org/project/awssdk
+-(For installation of awssdk, you will need to download the Amazon SDK for PHP and place it in sites/all/libraries/awdsdk )
++(For installation of awssdk, you will need to download the Amazon SDK for PHP and place it in sites/all/libraries/awssdk )
+ http://aws.amazon.com/sdkforphp/
+ 
+ - Configure AWS SDK
+@@ -13,4 +13,4 @@ http://aws.amazon.com/sdkforphp/
+ You can then:
+ - Visit admin/config/media/file-system and set the Default download method to S3
+ and/or
+-- Add a field of type File or Image etc and set the Upload destination to Amazon S3 in the Field Settings tab.
+\ No newline at end of file
++- Add a field of type File or Image etc and set the Upload destination to Amazon S3 in the Field Settings tab.
+diff --git a/amazons3.module b/amazons3.module
+index 9a81b73..848a74b 100644
+--- a/amazons3.module
++++ b/amazons3.module
+@@ -90,14 +90,14 @@ function amazons3_admin() {
+ function amazons3_admin_validate($form, &$form_state) {
+   $bucket = $form_state['values']['amazons3_bucket'];
+   $key = variable_get('aws_key', '');
+-  $secret_key = variable_get('aws_secret_key', '');
++  $secret_key = variable_get('aws_secret', '');
+   
+   if(!libraries_load('awssdk')) {
+     form_set_error('amazons3_bucket', t('Unable to load the AWS SDK. Please check you have installed the library correctly and configured your S3 credentials.'));
+   }
+   else {
+     try {
+-      $s3 = new AmazonS3($key, $secret_key);
++      $s3 = new AmazonS3(array('key' => $key, 'secret' => $secret_key));
+       // test connection
+       $user_id = $s3->get_canonical_user_id();
+       if(!$user_id['id']) {
+@@ -109,7 +109,7 @@ function amazons3_admin_validate($form, &$form_state) {
+     }
+     catch(RequestCore_Exception $e){
+       if(strstr($e->getMessage(), 'SSL certificate problem')) {
+-        form_set_error('amazons3_bucket', t('There was a problem with the SSL certificate. Try setting AWS_CERTIFICATE_AUTHORITY to true in libraries/awssdk/config.inc.php'));  
++        form_set_error('amazons3_bucket', t('There was a problem with the SSL certificate. Try setting "certificate_authority" to true in libraries/awssdk/config.inc.php'));  
+       }
+       else {
+         form_set_error('amazons3_bucket', t('There was a problem connecting to S3'));  

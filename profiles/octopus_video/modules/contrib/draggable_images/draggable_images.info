@@ -1,0 +1,22 @@
+; @author: Daniel Honrade http://drupal.org/user/351112
+
+name = "Draggable Images"
+package = Image
+description = "Draggable decorative images."
+core = "7.x"
+dependencies[] = image
+
+files[] = draggable_images.install
+files[] = draggable_images.module
+files[] = draggable_images.admin.inc
+files[] = draggable_images.utils.inc
+scripts[] = jquery.draggable_images.js
+stylesheets[all][] = draggable_images.css
+configure = admin/config/media/draggable_images
+
+; Information added by drupal.org packaging script on 2012-08-17
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "draggable_images"
+datestamp = "1345162508"
+

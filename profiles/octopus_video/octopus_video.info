@@ -1,0 +1,71 @@
+name = Octopus Video
+core = 7.x
+description = Install with video specific features pre-configured..
+files[] = octopus_video.profile
+
+; Core
+dependencies[] = comment
+dependencies[] = dblog
+dependencies[] = field_ui
+dependencies[] = file
+dependencies[] = menu
+dependencies[] = path
+dependencies[] = taxonomy
+dependencies[] = search
+dependencies[] = statistics
+dependencies[] = syslog
+
+; Contrib
+; Admin
+dependencies[] = admin_menu
+dependencies[] = admin_menu_toolbar
+dependencies[] = module_filter
+; Video
+dependencies[] = amazons3
+dependencies[] = awssdk
+dependencies[] = video
+dependencies[] = video_presets
+dependencies[] = videojs
+dependencies[] = zencoderapi
+; Social
+dependencies[] = fblikebutton
+dependencies[] = google_plusone
+
+dependencies[] = context
+dependencies[] = ctools
+dependencies[] = date
+dependencies[] = date_api
+dependencies[] = entity
+dependencies[] = features
+dependencies[] = field_group
+dependencies[] = fivestar
+dependencies[] = flag
+dependencies[] = libraries
+dependencies[] = list
+dependencies[] = logintoboggan
+dependencies[] = logintoboggan_rules
+dependencies[] = page_manager
+dependencies[] = panels
+dependencies[] = pathauto
+dependencies[] = quicktabs
+dependencies[] = rules
+dependencies[] = strongarm
+dependencies[] = token
+dependencies[] = tweetbutton
+; Views
+dependencies[] = views
+dependencies[] = views_content
+dependencies[] = views_slideshow
+dependencies[] = views_slideshow_cycle
+; User interface
+dependencies[] = votingapi
+
+; Custom
+dependencies[]  = video_video
+dependencies[]  = video_user
+
+; Information added by drush on 2013-04-18
+version = "unknown"
+project = "octopus_video"
+datestamp = "1366343531"
+

@@ -1,0 +1,26 @@
+<?php
+/**
+ * @file
+ * Draggable Images Install
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function draggable_images_install() {
+  // Make sure this module called last
+  // to override any form provided by other modules
+  //db_query("UPDATE {system} SET weight = 2070 WHERE name = 'draggable_images'");
+}
+
+
+/**
+ * Implements hook_uninstall().
+ */
+function draggable_images_uninstall() {
+  variable_del('draggable_images');
+}

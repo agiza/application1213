@@ -1,0 +1,24 @@
+--- jw_player.origine.module	2012-06-30 09:53:49.225572628 -0400
++++ jw_player.module	2012-06-30 09:55:37.337572636 -0400
+@@ -353,6 +353,14 @@
+       if (!$info['enable']) {
+         continue;
+       }
++      
++      //If the plugin has a config update function, call it.
++      $func = variable_get($plugin.'_update_func', 'none');
++      
++      if (function_exists($func)) {
++        $func($info);
++      }
++      
+       $variables['config']['plugins'][$plugin] = $info;
+     }
+   }
+@@ -409,4 +417,4 @@
+   }
+ 
+   return $plugins;
+-}
+\ Pas de fin de ligne à la fin du fichier.
++}

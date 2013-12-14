@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * Wysiwyg Tools Plus
+ * 
+ * Works with wysiwyg module and ckeditor to allow the creation of
+ * horizontal tabbed elements and accordion dropdown elements
+ * within the editor.
+ */ 
+
+
+/*
+* implements hook_wysiwyg_include_directory()
+*/
+function wysiwyg_tools_plus_wysiwyg_include_directory($type) {
+  switch($type) {
+    case 'plugins':
+      return "plugins";
+  }
+}
+
+/**
+ * implements hook_preprocess_node()
+ */
+function wysiwyg_tools_plus_preprocess_node(&$vars) {
+	drupal_add_js(drupal_get_path('module', 'wysiwyg_tools_plus') . '/js/tab_builder.js');
+	drupal_add_css(drupal_get_path('module', 'wysiwyg_tools_plus') . '/css/wysiwyg_tools_plus.css');
+}

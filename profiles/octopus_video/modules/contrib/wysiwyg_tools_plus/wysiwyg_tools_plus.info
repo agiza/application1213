@@ -1,0 +1,18 @@
+;$Id;
+;;
+name =  WYSIWYG Tools Plus
+description = Special plugins for Wysiwyg module and CKEditor to allow creation of Tabbed and Accodian type items in content creation
+
+core = 7.x
+version = "7.x-1.x-dev"
+
+dependencies[] = wysiwyg
+
+package = wysiwyg
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-alpha2"
+core = "7.x"
+project = "wysiwyg_tools_plus"
+datestamp = "1331780750"
+

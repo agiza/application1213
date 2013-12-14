@@ -1,0 +1,147 @@
+<?php
+/**
+ * @file
+ * Draggable Images Module
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ * Note: Obviously, this will not work unless the javascript is on.
+ *
+ */
+
+@include_once dirname(__FILE__) . '/draggable_images.utils.inc'; 
+
+/**
+ * Implements hook_init().
+ *
+ * Sets the defaults global
+ *
+ */
+function draggable_images_init() {
+
+  global $_draggable_images_defaults;
+  global $_draggable_images_set;
+
+  $_draggable_images_defaults = array(
+    'enabled'     => 1,  // always enabled by default
+    'position'    => 'absolute',
+    'vertical'    => 'top',
+    'horizontal'  => 'right',
+    'width'       => 960,
+    'height'      => 400,
+    'image_style' => 'medium',
+    'images'      => array(),
+    'exclude'     => 'admin*', // pages to exclude from rwd
+  );
+
+  $_draggable_images_set = variable_get('draggable_images', $_draggable_images_defaults);
+}
+
+
+/**
+ * Implements hook_menu().
+ *
+ */
+function draggable_images_menu() {
+
+  $items = array();
+
+  $items['admin/config/media/draggable_images'] = array(
+    'title' => 'Draggable Images',
+    'page callback' => 'drupal_get_form',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer draggable_images'),
+    'page arguments' => array('draggable_images_admin', NULL),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'draggable_images.admin.inc',
+    'description' => 'Configure Draggable Images',
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_perm().
+ *
+ */
+function draggable_images_permission() {
+
+  return array(
+    'administer draggable_images' => array(
+      'title' => t('Administer Draggable Images'),
+      'description' => t('Perform administration tasks for Draggable Images.'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_process_html().
+ *
+ * Initialize the trigger for responsive background
+ *
+ */
+function draggable_images_preprocess_page(&$vars) {
+
+  global $_draggable_images_set;
+
+  $settings = $_draggable_images_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+    drupal_add_library('system', 'ui');
+    drupal_add_library('system', 'ui.draggable');
+  }
+}
+
+
+/**
+ * Implements hook_process_html().
+ *
+ * Initialize the trigger for draggable images
+ *
+ */
+function draggable_images_process_html(&$vars) {
+
+  global $_draggable_images_set;
+
+  $settings = $_draggable_images_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+
+    // other options
+    $position    = $settings['position'];   // fixed/absolute
+    $vertical    = $settings['vertical'];  
+    $horizontal  = $settings['horizontal']; 
+    $width       = $settings['width'];      
+    $height      = $settings['height'];      
+    $image_style = $settings['image_style'];      
+            
+    // get rendered images
+    $images = draggable_images_get_images();
+
+    // get all images
+    $image_files = '';
+    foreach ($images as $key => $image) {
+      $image_files .= '<div class="draggable-image-container"><img id="draggable-image-' . $key . '" src="' . $image . '" class="draggable-image" alt="Draggable Image" /></div>';
+    }
+    // responsive background output
+    $image_wrapper = '<div id="draggable-images-wrapper">' . $image_files . '</div>';
+
+    $draggable_images_init = $image_wrapper . '
+
+      <script type="text/javascript">
+        (function($){
+          $(".draggable-image").draggable_images({
+            position: "' . $position . '",
+            vertical: "' . $vertical . '",
+            horizontal: "' . $horizontal . '",
+            width: "' . $width . '",
+            height: "' . $height . '",
+            image_style: "' . $image_style . '"
+          });
+        })(jQuery);
+      </script>';
+
+    $vars['page_bottom'] .= $draggable_images_init;
+  }
+}

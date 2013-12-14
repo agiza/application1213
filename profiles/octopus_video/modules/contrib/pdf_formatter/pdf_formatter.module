@@ -1,0 +1,160 @@
+<?php
+
+/**
+ * @file
+ * Provides helper functions for extracting text or HTML from PDF.
+ */
+
+/**
+ * Emulates the which Unix command in order to work even under Windows.
+ *
+ * @param $executable
+ *   The base name of the executable (without directory).
+ *
+ * @return
+ *   The full path to the executable according to the PATH environment
+ *   variable. If the executable is not to be found along the PATH variable,
+ *   an empty string is returned.
+ */
+function pdf_formatter_which($executable) {
+  $env_path = getenv('PATH');
+  $paths = explode(PATH_SEPARATOR, $env_path);
+  $extension = '';
+  if(PATH_SEPARATOR==';') $extension = '.exe';
+
+  foreach($paths as $path) {
+    if(substr($path,-1)!=DIRECTORY_SEPARATOR) {
+      $full_path_executable = $path.DIRECTORY_SEPARATOR.$executable.$extension;
+    } else {
+      $full_path_executable = $path.$executable.$extension;
+    }
+	
+    if(is_readable($full_path_executable)) return $full_path_executable;
+  }
+
+  return '';
+}
+
+/**
+ * Checks if pdftotext is installed.
+ *
+ * @return
+ *   TRUE if pdftotext is installed, FALSE otherwise.
+ */
+function pdf_formatter_pdftotext_installed() {
+  return pdf_formatter_which('pdftotext')!='';
+}
+
+/**
+ * Checks if pdftohtml is installed.
+ *
+ * @return
+ *   TRUE if pdftohtml is installed, FALSE otherwise.
+ */
+function pdf_formatter_pdftohtml_installed() {
+  return pdf_formatter_which('pdftohtml')!='';
+}
+
+/**
+ * Implements hook_help(). 
+ */
+function pdf_formatter_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#pdf_formatter':
+      // Return a line-break version of the module README.txt
+      return t('2 formatters for PDF files');
+  }
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function pdf_formatter_requirements($phase) {
+  $requirements=array();
+
+  if($phase=='runtime') {
+    // Checks for pdftotext
+    $requirement = array('title' => t('pdftotext'));
+    if(pdf_formatter_pdftotext_installed()) {
+      $requirement['value'] = t('Installed');
+      $requirement['severity'] = REQUIREMENT_OK;
+    } else {
+      $requirement['description'] = t('Not installed');
+      $requirement['severity'] = REQUIREMENT_WARNING;
+    }
+    $requirements['pdftotext'] = $requirement;
+
+    // Checks for pdftohtml
+    $requirement = array('title' => t('pdftohtml'));
+    if(pdf_formatter_pdftohtml_installed()) {
+      $requirement['value'] = t('Installed');
+      $requirement['severity'] = REQUIREMENT_OK;
+    } else {
+      $requirement['description'] = t('Not installed');
+      $requirement['severity'] = REQUIREMENT_WARNING;
+    }
+    $requirements['pdftohtml'] = $requirement;
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function pdf_formatter_field_formatter_info() {
+  return array(
+    'file_pdf_to_text_formatter' => array(
+      'label' => t('Convert PDF to text'),
+      'field types' => array('file'),
+    ),
+    'file_pdf_to_html_formatter' => array(
+      'label' => t('Convert PDF to HTML'),
+      'field types' => array('file'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function pdf_formatter_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+
+  switch($display['type']) {
+    // PDF to text formatter
+    case 'file_pdf_to_text_formatter':
+      $pdftotext_installed = pdf_formatter_pdftotext_installed();
+      foreach ($items as $delta => $item) {
+        $text = '';
+        if($pdftotext_installed and !empty($item['uri'])) {
+          $text = shell_exec('pdftotext -enc UTF-8 -nopgbrk '.escapeshellarg(drupal_realpath($item['uri'])).' -');
+        }
+
+        $element[$delta] = array('#markup' => $text);
+      }
+      break;
+
+    // PDF to html formatter
+    case 'file_pdf_to_html_formatter':
+      $pdftohtml_installed = pdf_formatter_pdftohtml_installed();
+      foreach ($items as $delta => $item) {
+        $html = '';
+        if($pdftohtml_installed and !empty($item['uri'])) {
+          $html = shell_exec('pdftohtml -q -i -noframes -stdout '.escapeshellarg(drupal_realpath($item['uri'])));
+          // pdftohtml tends to generate too many non break spaces,
+          // replace them with standard spaces
+          $html = str_replace('&nbsp;',' ',$html);
+
+          // pdftohtml generates a complete HTML file.
+          // Drupal only waits for contents between the body tag
+          $html = preg_replace('/.*<BODY[^>]*>(.*)<\/BODY>.*/si', '\\1', $html);
+        }
+
+        $element[$delta] = array('#markup' => $html);
+      }
+      break;
+  }
+
+  return $element;
+}

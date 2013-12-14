@@ -1,0 +1,35 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #E9E8E5;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  color: #597F2B;
+}
+
+div.ready-tabber {
+	border: dashed 1px #555;
+	margin: 15px 0 0 0;
+  padding: 0 10px 10px 10px;
+  -moz-border-radius: 10px;
+  -webkit-border-radius: 10px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.ready-tabber h4.ready-tabber-header {
+	border: solid 1px #999;
+  font-weight: normal;
+  -moz-border-top-left-radius: 10px;
+  -webkit-border-top-left-radius: 10px;
+  border-top-left-radius: 10px;
+  -moz-border-top-right-radius: 10px;
+  -webkit-border-top-right-radius: 10px;
+  border-top-right-radius: 10px;
+
+  padding: 5px 0 5px 10px;
+}

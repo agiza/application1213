@@ -1,0 +1,8 @@
+<?php
+/**
+ * Implements hook_install().
+ */
+function pdf_formatter_install() {
+  drupal_set_message(st('PDF Formatter has been installed'));
+}
+

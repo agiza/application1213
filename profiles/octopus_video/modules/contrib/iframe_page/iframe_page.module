@@ -1,0 +1,128 @@
+<?php
+
+/**
+ * @file
+ * Drupal module, proving an iframe page node type.
+ */
+
+// Matches a string composed of one or more digits, followed by either
+// a decimal point with one or more digits and a percent sign after it,
+// just a percent sign or nothing.
+define('IFRAME_PAGE_PERCENT_MATCHER', '/^\d+(?:\.\d+%|%)?$/');
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function iframe_page_form_iframe_page_node_form_alter(&$form, &$form_state, $form_id) {
+  // add validation for height, width & URL
+  $form['#validate'][] = 'iframe_page_values_validate';
+}
+
+
+/**
+ * Custom validation function
+ */
+function iframe_page_values_validate($form, $form_state) {
+  $url = $form_state['values']['iframe_page_url'][LANGUAGE_NONE][0]['value'];
+  $height = $form_state['values']['iframe_page_height'][LANGUAGE_NONE][0]['value'];
+  $width = $form_state['values']['iframe_page_width'][LANGUAGE_NONE][0]['value'];
+
+  if (!filter_var($url, FILTER_VALIDATE_URL, FILTER_FLAG_SCHEME_REQUIRED) && !iframe_page_internal_url($url)) {
+    form_set_error('iframe_page_url', t('Invalid URL.'));
+  }
+
+  if (!preg_match(IFRAME_PAGE_PERCENT_MATCHER, $height) || $height < 2) {
+    form_set_error('iframe_page_height', t('Height must be either a percentage (like 25.1%) or a number larger than one.'));
+  }
+
+  if (!preg_match(IFRAME_PAGE_PERCENT_MATCHER, $width) || $width < 2) {
+    form_set_error('iframe_page_width', t('Width must be either a percentage (like 95.8%) or a number larger than one.'));
+  }
+}
+
+
+/**
+ * checks internal URL
+ */
+function iframe_page_internal_url($url) {
+  // @TODO - if it's an internal URL without internal - check for errostate here.
+  $path = explode('/', $url);
+  if ($path[0] == 'node') {
+    // check for valid nid
+    $results = db_query("SELECT nid FROM {node} where status = 1 AND nid = :d", array(':d' => $path[1]))->fetchField();
+    if (!empty($results)) {
+      return TRUE;
+    }
+  }
+  else {
+    // returns FALSE if no alias found
+    $alias = drupal_lookup_path('source', $url);
+    if ($alias) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+
+/**
+ * Implements hook_node_view_alter().
+ */
+function iframe_page_node_view_alter(&$build) {
+	$url = 		 $build['body']['#object']->iframe_page_url[LANGUAGE_NONE][0]['value'];
+	$height =  $build['body']['#object']->iframe_page_height[LANGUAGE_NONE][0]['value'];
+	$width =   $build['body']['#object']->iframe_page_width[LANGUAGE_NONE][0]['value'];
+	$get =     $build['body']['#object']->iframe_page_send_get_parameters[LANGUAGE_NONE][0]['value'];
+	$session = $build['body']['#object']->iframe_page_send_session_id[LANGUAGE_NONE][0]['value'];
+
+  //	@TODO = get/set & some data validity checks
+
+  // hiding!
+  unset($build['iframe_page_height']);
+  unset($build['iframe_page_width']);
+  unset($build['iframe_page_send_get_parameters']);
+  unset($build['iframe_page_send_session_id']);
+
+
+  // iframe page URL becomes re-processed as the fancy frame
+  $build['iframe_page_url'][0]['#markup'] = theme('iframe_page_iframe',
+    array('url' => $url, 'height' => $height, 'width' => $width, 'get' => $get, 'session' => $session));
+}
+
+
+/**
+ * Implements hook_theme().
+ */
+function iframe_page_theme($existing, $type, $theme, $path) {
+  return array(
+    'iframe_page_iframe' => array(
+      'variables' => array('url' => NULL, 'height' => NULL, 'width' => NULL, 'get' => NULL, 'session' => NULL),
+    ),
+  );
+}
+
+
+/**
+ * Theme function to render the iframe markup.
+ */
+function theme_iframe_page_iframe($variables) {
+
+  $params = array();
+
+  if ($variables['get']) {
+    $params = $_GET;
+    // Never send the q parameter along, since it messes up Drupal sites
+    unset($params['q']);
+  }
+
+  if ($variables['session'] && user_is_logged_in()) {
+    global $user;
+    $params['sid'] = $user->sid;
+  }
+
+  $url = url($variables['url'], array('query' => $params));
+
+  return '<iframe src="' . $url . '" height="' . $variables['height'] . '" width="' . $variables['width'] . '" frameborder="0">' . t('Your browser does not support iframes such as the one on this page. However, we still link you to the missing <a href="@url">content</a>.', array('@url' => $url)) . '</iframe>';
+}
+

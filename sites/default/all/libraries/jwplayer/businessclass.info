@@ -1,0 +1,37 @@
+name = BusinessClass
+description = The next generation corporate Drupal theme by More than (just) Themes.
+version = 2.6.0
+core = 7.x
+
+stylesheets[all][] = style.css
+
+regions[header] = Header
+regions[header_right] = Header right
+regions[navigation] = Navigation
+regions[banner] = Banner
+regions[highlighted] = Highlighted
+regions[promoted] = Promoted area
+regions[custom_front_area] = Custom front area
+regions[content] = Content
+regions[sidebar_first] = First sidebar
+regions[footer_first] = Footer first
+regions[footer_second] = Footer second
+regions[footer_third] = Footer third
+regions[footer] = Footer
+regions[footer_bottom_right] = Footer bottom right
+regions[help] = Help
+regions[page_top] = Page top
+regions[page_bottom] = Page bottom
+
+scripts[] = js/jquery.cycle.all.js
+
+settings[breadcrumb_display]= 1
+settings[scrolltop_display]= 1
+settings[color_scheme]= 'default'
+settings[sitename_font_family]= 'sff-default'
+settings[headings_font_family]= 'hff-default'
+settings[paragraph_font_family]= 'pff-default'
+settings[slideshow_effect]='fade'
+settings[slideshow_effect_time]='10'
+settings[frontpage_emulate]= 0
+settings[frontpage_content_print]= 0

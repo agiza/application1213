@@ -1,0 +1,25 @@
+/**
+ * @file
+ * Draggable Images default CSS
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ */
+
+/* Draggable Images Render */  
+#draggable-images-wrapper { right: 0; top: 0; z-index: 100; width: 960px; height: 400px; }
+.draggable-image-container { float: left; padding: 20px; background-color: #fff; border: 1px solid #ccc; }
+.draggable-image { left: 0; top: 0; z-index: 0; }
+
+
+/* Draggable Images Admin UI */
+#edit-draggable-images .draggable-images-columns {}
+#edit-draggable-images .draggable-images-column { width: 49%;}
+#edit-draggable-images .draggable-images-column-1 { float: left; }
+#edit-draggable-images .draggable-images-column-2 { float: right; }
+#edit-draggable-images .description { clear: both; }
+
+#header-wrapper, #header, #branding, #page-wrapper, #page, #footer-wrapper, #footer {
+    position: relative;
+    z-index: 10;
+}

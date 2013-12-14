@@ -1,0 +1,14 @@
+--- field_jquery_tabs.module
++++ field_jquery_tabs.module
+@@ -203,9 +202,9 @@
+  */
+ function _field_jquery_tabs_validate(&$item, $delta, $field, $node, $instance, $langcode) {
+ 
+-  for ($i = 2; $i <= 7; $i++) {
++  for ($i = 1; $i <= 7; $i++) {
+     if (isset($item['tab_body_' . $i])) {
+-      if (!empty($item['tab_body_' . $i])) {
++      if (!empty($item['tab_body_' . $i]['value'])) {
+         if (empty($item['tab_title_' . $i])) {
+           form_set_error($field['field_name'] . '][' . $langcode . '][' . $delta . '][tab_title_' . $i, t('Tab @value Title is manadatory if you choose to enter text in Tab @value body', array('@value' => $i)));
+         }

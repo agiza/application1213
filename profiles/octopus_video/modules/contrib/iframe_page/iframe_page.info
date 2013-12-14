@@ -1,0 +1,13 @@
+
+name = iframe page
+description = Provides a content type that has a configurable iframe to a specific location as its main content.
+core = 7.x
+php = 5.2
+
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "iframe_page"
+datestamp = "1380582628"
+

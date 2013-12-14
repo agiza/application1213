@@ -1,0 +1,171 @@
+diff --git a/jw_player.api.php b/jw_player.api.php
+new file mode 100644
+index 0000000..781ea80
+--- /dev/null
++++ b/jw_player.api.php
+@@ -0,0 +1,35 @@
++<?php
++
++/**
++ * @file
++ * Hooks provided by JW Player.
++ */
++
++/**
++ * Implements hook_jw_player_plugin_info()
++ *
++ * @return array Associative array of plugins keyed by actual plugin id
++ */
++function hook_jw_player_plugin_info($preset) {
++  // Create a plugin keyed by its actual plugin id
++  $plugins['foo'] = array(
++    'name' => t('Foobar'),
++    'description' => t('A plugin to do foobar'),
++    // Note: Each option should be in a valid FAPI format, as it is directly referenced in the preset settings form,
++    // except the '#title' may be omitted for the name of the option to be taken as default
++    'config options' => array(
++      'accountid' => array(
++        '#type' => 'textfield',
++        '#required' => TRUE,
++        '#size' => 15,
++        '#default_value' => 'bar'
++      ),
++      'param2' => array(
++        '#type' => 'select',
++        '#options' => array('TRUE' => 'TRUE', 'FALSE' => 'FALSE'),
++        '#default_value' => 'TRUE',
++        '#description' => t('Enables the controls on an item when playing')),
++    ),
++  );
++  return $plugins;
++}
+\ No newline at end of file
+diff --git a/jw_player.module b/jw_player.module
+index 751f1cb..9223bb5 100755
+--- a/jw_player.module
++++ b/jw_player.module
+@@ -273,9 +273,7 @@ function jw_player_preprocess_jw_player(&$variables) {
+   $variables['html_id'] = drupal_html_id('jw_player');
+ 
+   // Create a configuration array which will be passed to JWPlayer's JavaScript.
+-  $variables['config'] = array(
+-    'file' => $variables['file_url'],
+-  );
++  $variables['config']['file'] = $variables['file_url'];
+ 
+   // Resolve skin url
+   $skin = !empty($variables['skin']) ? jw_player_skins($variables['skin']) : '';
+@@ -300,8 +298,37 @@ function jw_player_preprocess_jw_player(&$variables) {
+     ),
+   );
+ 
++  // Copy over all enabled plugins into the 'config' section as this is the key that is sent over to the player
++  if (!empty($variables['plugins'])) {
++    foreach ($variables['plugins'] as $plugin => $info) {
++      if (!$info['enable']) {
++        continue;
++      }
++      $variables['config']['plugins'][$plugin] = $info;
++    }
++  }
++
+   // Add dependent resources
+   drupal_add_js($player_path . '/jwplayer.js'); // Add library
+   drupal_add_js(drupal_get_path('module', 'jw_player') . '/jw_player.js'); // Attaches JW Player element
+   drupal_add_js(array('jw_player' => array($variables['html_id'] => $variables['config'])), 'setting'); // Player settings
+ }
++
++/**
++ * Retrieves all available preset plugins,
++ */
++function jw_player_preset_plugins($name = NULL) {
++  $plugins = &drupal_static(__FUNCTION__);
++
++  if (!isset($plugins)) {
++    $plugins = module_invoke_all('jw_player_plugin_info');
++    // Allow modules to alter other modules' plugin definitions
++    drupal_alter('jw_player_plugin_info', $plugins);
++  }
++
++  if ($name && isset($plugins[$name])) {
++    return $plugins[$name];
++  }
++
++  return $plugins;
++}
+\ No newline at end of file
+diff --git a/plugins/export_ui/jw_player_ctools_export_ui.inc b/plugins/export_ui/jw_player_ctools_export_ui.inc
+index 522497b..9d6415a 100755
+--- a/plugins/export_ui/jw_player_ctools_export_ui.inc
++++ b/plugins/export_ui/jw_player_ctools_export_ui.inc
+@@ -49,7 +49,7 @@ function jw_player_ctools_export_ui_form(&$form, &$form_state) {
+     '#size' => 20,
+     '#maxlength' => 255,
+     '#title' => t('Preset name'),
+-    '#description' => t('Enter name for the preet.'),
++    '#description' => t('Enter name for the preset.'),
+     '#default_value' =>  $preset->preset_name,
+     '#required' => true,
+     '#weight' => 0,
+@@ -139,7 +139,7 @@ function jw_player_ctools_export_ui_form(&$form, &$form_state) {
+   //   ),
+   //   '#weight' => 8,
+   // );
+-  // 
++  //
+   //  $form['settings']['playlist.size'] = array(
+   //   '#title' => t('Playlist Width'),
+   //   '#type' => 'textfield',
+@@ -164,6 +164,52 @@ function jw_player_ctools_export_ui_form(&$form, &$form_state) {
+     '#options' => $skin_options,
+   );
+ 
++  // Add preset plugin settings
++  foreach (jw_player_preset_plugins() as $plugin => $info) {
++    $form['settings']['plugins']['#weight'] = 8;
++
++    // Fieldset per plugin
++    $form['settings']['plugins'][$plugin] = array(
++      '#type' => 'fieldset',
++      '#title' => t($info['name']),
++      '#description' => t($info['desciption']),
++      '#tree' => TRUE,
++      '#weight' => 10,
++      '#collapsible' => TRUE,
++      '#collapsed' => FALSE,
++    );
++
++    // Enable/disable plugin setting
++    $form['settings']['plugins'][$plugin]['enable'] = array(
++      '#type' => 'checkbox',
++      '#title' => t('Enable'),
++      '#description' => t($info['desciption']),
++      '#default_value' => isset($settings['plugins'][$plugin]['enable']) ? $settings['plugins'][$plugin]['enable'] : FALSE,
++    );
++
++    // Add each config option specified in the plugin
++    // Config options should be in FAPI structure
++    if (is_array($info['config options']) and !empty($info['config options'])) {
++      foreach ($info['config options'] as $option => $element) {
++        // Note: Each config option must be a complete FAPI element, except for the #title which is optional.
++        // If the #title is not provided, we use the name of the config option as the title
++        if (!isset($element['#title'])) {
++          $element['#title'] = ucfirst($option);
++        }
++        // Alter the default value if a setting has been saved previously
++        $element['#default_value'] = !empty($settings['plugins'][$plugin][$option]) ? $settings['plugins'][$plugin][$option] : $element['#default_value'];
++        // Make the whole element visible only if the plugin is checked (enabled)
++        $element['#states'] = array(
++          'visible' => array(
++               'input[name="settings[plugins][' . $plugin .'][enable]"]' => array('checked' => TRUE),
++              ),
++        );
++        // Add the element to the FAPI structure
++        $form['settings']['plugins'][$plugin][$option] = $element;
++      }
++    }
++  }
++
+   $form['settings']['autoplay'] = array(
+     '#title' => t('Autoplay'),
+     '#type' => 'checkbox',

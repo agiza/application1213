@@ -1,0 +1,6 @@
+name = Epic Image Zoom
+description = Add zoom functionality to any image on your site.
+core = 7.x
+version = "7.x-1.0"
+package = User interface
+configure = admin/config/user-interface/wf_eiz

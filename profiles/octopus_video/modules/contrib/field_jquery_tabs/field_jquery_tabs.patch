@@ -1,0 +1,13 @@
+diff --git a/sites/all/modules/contrib/field_jquery_tabs/field_jquery_tabs.module b/sites/all/modules/contrib/field_jquery_tabs/index 200763d..9e8459d 100644
+--- a/sites/all/modules/contrib/field_jquery_tabs/field_jquery_tabs.module
++++ b/sites/all/modules/contrib/field_jquery_tabs/field_jquery_tabs.module
+@@ -204,7 +204,7 @@ function field_jquery_tabs_field_validate($entity_type, $entity, $field, $instan
+  */
+ function _field_jquery_tabs_validate(&$item, $delta, $field, $node, $instance, $langcode) {
+ 
+-  for ($i = 2; $i <= 7; $i++) {
++  for ($i = 1; $i <= 7; $i++) {
+     if (isset($item['tab_body_' . $i])) {
+       if (!empty($item['tab_body_' . $i])) {
+         if (empty($item['tab_title_' . $i])) {
+~

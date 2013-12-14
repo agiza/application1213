@@ -1,0 +1,152 @@
+<?php
+/*
+ File: wf_eiz.module
+ Description: Module for Epic Image Zoom
+ Author: Web factory Ltd
+*/
+
+
+function wf_eiz_init() {
+  wf_eiz_add_files();
+} // wf_eiz_init
+
+function wf_eiz_add_files() {
+  $path = drupal_get_path('module', 'wf_eiz');
+  
+  drupal_add_js($path . '/js/epic-image-zoom.js', array('scope' => 'header', 'weight' => 5));
+  
+  $script  = 'jQuery(document).ready(function($){';
+  $script .= '$("' . variable_get('eiz_zoom_class', '.content img') . '").epicZoom({magnification:' . variable_get('eiz_zoom_factor', 2) . ',
+                                                                          size:' . variable_get('eiz_size', 150) . ',
+                                                                          border:"' . variable_get('eiz_border_size', 1) . 'px solid ' . variable_get('eiz_border_color', '#000000') . '",
+                                                                          hideCursor:' . variable_get('eiz_hide_cursor', 1) . ',
+                                                                          newPosition:' . variable_get('eiz_new_position', 3) . ',
+                                                                          debug:' . variable_get('eiz_debug', 0) . '});';
+  $script .= '});';
+  
+  drupal_add_js($script, array('type'=> 'inline', 'scope' => 'footer', 'weight' => 5));
+} // wf_eiz_add_files
+
+
+function wf_eiz_help($path, $arg) {
+  $output = '';
+  
+  switch ($path) {
+    case 'admin/help#wf_eiz':
+      $output .= '<p>If you need <a href="http://codecanyon.net/user/WebFactory#from">support</a> please contact us via our CodeCanyon profile.';
+      $output .= ' Epic Image Zoom for Drupal is made by <a href="http://www.webfactoryltd.com" target="_blank">Web factory Ltd</a>.</p><br />';
+      $output .= '<h3>FAQ</h3><h5>Are there any limits? How many zoomable images can I have on one page?</h5>
+<p>As far as EIZ is concerned there are no limits. However please be reasonable and take into account that users don\'t like opening pages that load too long.</p>
+<h5>Can images be links and zoomable at the same time?</h5>
+<p>Yes of course! You can also attach any other usual events you want to them.</p>
+<h5>Magnifier/zoom box does not appear under the cursor, it has a weird offset.</h5>
+<p>See the "Zoom box position fix" option.</p><br />';
+    break;
+  }
+  
+  return $output;
+} // wf_eiz_help
+
+
+function wf_eiz_menu() {
+  $items = array();
+
+  $items['admin/config/user-interface/wf_eiz'] = array(
+    'title' => 'Epic Image Zoom',
+    'description' => 'Configuration for Epic Image Zoom module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('wf_eiz_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM);
+ 
+  return $items;
+} // wf_eiz_menu
+
+function wf_eiz_form_validate($form, &$form_state) {
+  if (!is_numeric($form_state['values']['eiz_zoom_factor'])) {
+    form_set_error('eiz_zoom_factor', t('Zoom factor has to be a float number, ie: 2.5.'));
+  }
+  if (!is_numeric($form_state['values']['eiz_size'])) {
+    form_set_error('eiz_size', t('Box size has to be an integer, ie: 150.'));
+  }
+  if (!is_numeric($form_state['values']['eiz_border_size'])) {
+    form_set_error('eiz_size', t('Border size has to be an integer, ie: 2.'));
+  }
+  
+  if (strlen($form_state['values']['eiz_border_color']) != 7) {
+    form_set_error('eiz_size', t('Border color.'));
+  }
+}
+
+function wf_eiz_form($form, &$form_state) {
+  drupal_add_css('misc/farbtastic/farbtastic.css');
+  drupal_add_js('misc/farbtastic/farbtastic.js');
+  
+  $form['eiz_size'] = array('#type' => 'textfield',
+                            '#title' => t('Zoom box size'),
+                            '#default_value' => variable_get('eiz_size', 150),
+                            '#size' => 4,
+                            '#maxlength' => 4,
+                            '#description' => t('Magnifier width (and height) in pixels.'),
+                            '#required' => TRUE);
+
+  $form['eiz_zoom_factor'] = array('#type' => 'textfield',
+                                   '#title' => t('Zoom magnification ratio'),
+                                   '#default_value' => variable_get('eiz_zoom_factor', 2),
+                                   '#size' => 5,
+                                   '#maxlength' => 5,
+                                   '#description' => t('Magnification ratio relative to the original image size.'),
+                                   '#required' => TRUE);
+                                   
+  $form['eiz_zoom_class'] = array('#type' => 'textfield',
+                                  '#title' => t('Zoom class'),
+                                  '#default_value' => variable_get('eiz_zoom_class', '.content img'),
+                                  '#size' => 25,
+                                  '#maxlength' => 99,
+                                  '#description' => t('Elements that EIZ will target. If you need multiple classes separate them with a comma.'),
+                                  '#required' => TRUE);
+  
+  $form['eiz_border_size'] = array('#type' => 'textfield',
+                                   '#title' => t('Zoom box border size'),
+                                   '#default_value' => variable_get('eiz_border_size', 1),
+                                   '#size' => 2,
+                                   '#maxlength' => 2,
+                                   '#description' => t('Border size for zoom box in pixels.'),
+                                   '#required' => TRUE);
+                                   
+  $form['eiz_border_color'] = array('#type' => 'textfield',
+                                    '#title' => t('Zoom box border color'),
+                                    '#default_value' => variable_get('eiz_border_color','#000000'),
+                                    '#size' => 7,
+                                    '#maxlength' => 7,
+                                    '#description' => '<div id="eiz_border_color_colorpicker"></div>' . t('Border color for zoom box.'),
+                                    '#required' => TRUE,
+                                    '#suffix' => "<script type='text/javascript'>jQuery(document).ready(function() { jQuery('#eiz_border_color_colorpicker').farbtastic('#edit-eiz-border-color');});</script>");
+  
+  $form['eiz_new_position'] = array('#type' => 'select', 
+                                    '#title' => t('Zoom box position fix'),
+                                    '#default_value' => variable_get('eiz_new_position', 3),
+                                    '#options' => array(3 => t('Default positioning'),
+                                                        2 => t('Fix #1'),
+                                                        1 => t('Fix #2')),
+                                    '#description' => t('If the zoom box is not positioned properly please try using one of two fixes.'),
+                                    '#required' => TRUE);
+                                    
+  $form['eiz_hide_cursor'] = array('#type' => 'select', 
+                                   '#title' => t('Hide cursor on hover'),
+                                   '#default_value' => variable_get('eiz_hide_cursor', 1),
+                                   '#options' => array(0 => t('No, show it'),
+                                                       1 => t('Yes, hide it')),
+                                   '#description' => t('If enabled cursor will be hidden on image hover.'),
+                                   '#required' => TRUE);
+                                   
+  $form['eiz_debug'] = array('#type' => 'select', 
+                             '#title' => t('Debug mode'),
+                             '#default_value' => variable_get('eiz_debug', 0),
+                             '#options' => array(0 => t('Disabled'),
+                                                 1 => t('Enabled')),
+                             '#description' => t('Debug messages will be shown in JS console; Firebug\'s for instance.'),
+                             '#required' => TRUE);
+
+  return system_settings_form($form);
+} // wf_eiz_form

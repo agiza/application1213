@@ -1,0 +1,13 @@
+diff --git a/multiupload_filefield_widget.field.inc b/multiupload_filefield_widget.field.inc
+index 4e1947c..39d12ac 100644
+--- a/multiupload_filefield_widget.field.inc
++++ b/multiupload_filefield_widget.field.inc
+@@ -184,7 +184,7 @@ function mfw_field_widget_process_multiple($element, &$form_state, $form) {
+     }
+   }
+ 
+-  $element_children = element_children($element, TRUE);
++  $element_children = element_children($element, FALSE);
+   $count = count($element_children);
+ 
+   foreach ($element_children as $delta => $key) {

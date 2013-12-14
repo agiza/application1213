@@ -1,0 +1,22 @@
+--- multiupload_filefield_widget.module
++++ multiupload_filefield_widget.module
+@@ -379,3 +379,19 @@
+   }
+   return FALSE;
+ }
++
++/**
++ * Implements hook_insert_widgets().
++ */
++function multiupload_filefield_widget_insert_widgets() {
++  return array(
++    'file_mfw' => array(
++      'element_type' => 'mfw_managed_file',
++      'wrapper' => '.file-widget',
++      'fields' => array(
++        'description' => 'input[name$="[description]"]',
++      ),
++    ),
++  );
++}
++

@@ -1,0 +1,11 @@
+name = jQuery Tabs Field
+description = Defines jQuery tabs field type.
+core = 7.x
+package = Fields
+
+; Information added by drupal.org packaging script on 2013-07-29
+version = "7.x-3.0"
+core = "7.x"
+project = "field_jquery_tabs"
+datestamp = "1375095368"
+

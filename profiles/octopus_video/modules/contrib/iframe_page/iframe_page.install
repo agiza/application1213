@@ -1,0 +1,193 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the iframe_page module.
+ *
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function iframe_page_install() {
+  $t = get_t();
+
+  $iframe_page = array(
+    'type' => 'iframe_page',
+    'name' => $t('Iframe page'),
+    // @todo - document as this is a departure from d6 implementation
+    'base' => 'node_content',
+    'description' => $t('An iframe page is a page where the main content is an iframe, usually containing content from an external site.'),
+    'title_label' => $t('Title'),
+    'custom' => TRUE,
+  );
+
+  $content_type = node_type_set_defaults($iframe_page);
+
+  //We add a body field and set the body label immediately.
+  node_add_body_field($content_type, $t('Body'));
+  node_type_save($content_type);
+
+  // Create all the fields we are adding to our content type.
+  foreach (_iframe_page_installed_fields() as $field) {
+    field_create_field($field);
+  }
+
+  // Create all the instances for our fields.
+  foreach (_iframe_page_installed_instances() as $instance) {
+    $instance['entity_type'] = 'node';
+    $instance['bundle'] = 'iframe_page';
+    field_create_instance($instance);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function iframe_page_uninstall() {
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  $result = db_query($sql, array(':type' => 'iframe_page'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+
+  node_delete_multiple($nids);
+
+  // Loop over each of the fields defined by this module and delete
+  // all instances of the field, their data, and the field itself.
+  foreach (array_keys(_iframe_page_installed_fields()) as $field) {
+    field_delete_field($field);
+  }
+
+  // Loop over any remaining field instances attached to the iframe_page
+  $instances = field_info_instances('node', 'iframe_page');
+  foreach ($instances as $instance_name => $instance) {
+    field_delete_instance($instance);
+  }
+
+  // Delete our content type
+  node_type_delete('iframe_page');
+
+  // Purge all field infromation
+  field_purge_batch(1000);
+}
+
+/**
+ * Returns a structured array defining the fields created by this content type.
+ *
+ * @return
+ *  An associative array specifying the fields we wish to add to our
+ *  new node type.
+ */
+function _iframe_page_installed_fields() {
+  $t = get_t();
+  return array(
+    'iframe_page_url' => array(
+      'field_name' => 'iframe_page_url',
+      'cardinality' => 1,
+      'type'        => 'text',
+      'settings'    => array(
+        'max_length' => 256,
+      ),
+    ),
+    'iframe_page_height' => array(
+      'field_name'  => 'iframe_page_height',
+      'cardinality' => 1,
+      'type'        => 'text',
+    ),
+    'iframe_page_width' => array(
+      'field_name'  => 'iframe_page_width',
+      'cardinality' => 1,
+      'type'        => 'text',
+    ),
+    'iframe_page_send_session_id' => array(
+      'field_name'  => 'iframe_page_send_session_id',
+      'cardinality' => 1,
+      'type'        => 'list_boolean',
+      'settings' => array(
+        'allowed_values' => array(
+          0 => '',
+          1 => '',
+        ),
+        'allowed_values_function' => '',
+      ),
+    ),
+    'iframe_page_send_get_parameters' => array(
+      'field_name'  => 'iframe_page_send_get_parameters',
+      'cardinality' => 1,
+      'type'        => 'list_boolean',
+      'settings' => array(
+        'allowed_values' => array(
+          0 => '',
+          1 => '',
+        ),
+        'allowed_values_function' => '',
+      ),
+    ),
+  );
+}
+
+/**
+ * Returns a structured array defining the instances for this content type.
+ *
+ * @return
+ *  An associative array specifying the instances we wish to add to our new
+ *  node type.
+ */
+function _iframe_page_installed_instances() {
+  $t = get_t();
+  return array(
+    'iframe_page_url' => array(
+      'field_name' => 'iframe_page_url',
+      'label'       => $t('URL'),
+      'widget'      => array(
+        'type'    => 'text_textfield',
+      ),
+    ),
+    'iframe_page_height' => array(
+      'field_name'  => 'iframe_page_height',
+      'label' => $t('Height'),
+      'type'        => 'text',
+      'widget'      => array(
+        'type'    => 'text_textfield',
+      ),
+    ),
+    'iframe_page_width' => array(
+      'field_name'  => 'iframe_page_width',
+      'label' => $t('Width'),
+      'type'        => 'text',
+      'widget'      => array(
+        'type'    => 'text_textfield',
+      ),
+    ),
+    'iframe_page_send_session_id' => array(
+      'field_name'  => 'iframe_page_send_session_id',
+      'label' => $t('Send Session ID'),
+      'type'        => 'list_boolean',
+      'widget' => array(
+        'active' => 1,
+        'module' => 'options',
+        'settings' => array(
+          'display_label' => 1,
+        ),
+        'type' => 'options_onoff',
+        'weight' => '6',
+      ),
+    ),
+   'iframe_page_send_get_parameters' => array(
+    'field_name'  => 'iframe_page_send_get_parameters',
+    'label' => $t('Send Get Parameters'),
+    'type'        => 'list_boolean',
+    'widget' => array(
+      'active' => 1,
+      'module' => 'options',
+      'settings' => array(
+        'display_label' => 1,
+      ),
+      'type' => 'options_onoff',
+      'weight' => '6',
+    ),
+  ),
+  );
+}

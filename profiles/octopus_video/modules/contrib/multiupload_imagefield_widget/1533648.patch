@@ -1,0 +1,24 @@
+diff --git a/multiupload_filefield_widget.module b/multiupload_filefield_widget.module
+index 7dbdd73..9a91fb2 100644
+--- a/multiupload_filefield_widget.module
++++ b/multiupload_filefield_widget.module
+@@ -379,3 +379,19 @@ function mfw_file_save_upload($source, $file_number, $validators = array(), $des
+   }
+   return FALSE;
+ }
++
++/**
++ * Implements hook_insert_widgets().
++ */
++function multiupload_filefield_widget_insert_widgets() {
++  return array(
++    'file_mfw' => array(
++      'element_type' => 'mfw_managed_file',
++      'wrapper' => '.file-widget',
++      'fields' => array(
++        'description' => 'input[name$="[description]"]',
++      ),
++    ),
++  );
++}
++
